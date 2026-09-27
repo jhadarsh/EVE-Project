@@ -1,0 +1,8 @@
+import { motion } from "framer-motion";
+import { AlertCircle, Inbox, Loader2 } from "lucide-react";
+
+export function Skeleton({ className="" }) { return <div className={`animate-pulse rounded-xl bg-gray-100 ${className}`} />; }
+export function LoadingBlock({ label="Loading..." }) { return <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="animate-spin" size={18}/>{label}</div>; }
+export function EmptyState({ title, description, action }) { return <div className="panel flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><Inbox className="mb-3 text-gray-300" size={40}/><h3 className="font-semibold">{title}</h3><p className="mt-1 max-w-md text-sm text-gray-500">{description}</p>{action && <div className="mt-5">{action}</div>}</div>; }
+export function ErrorState({ title="Something went wrong", message, onRetry }) { return <motion.div initial={{opacity:0}} animate={{opacity:1}} className="panel flex min-h-[220px] flex-col items-center justify-center px-6 text-center"><AlertCircle className="mb-3 text-red-400" size={40}/><h3 className="font-semibold">{title}</h3><p className="mt-1 max-w-md text-sm text-gray-500">{message}</p>{onRetry && <button className="btn-secondary mt-5" onClick={onRetry}>Try again</button>}</motion.div>; }
+export function PageSpinner() { return <div className="flex min-h-[55vh] items-center justify-center"><Loader2 className="animate-spin text-brand-600" size={30}/></div>; }

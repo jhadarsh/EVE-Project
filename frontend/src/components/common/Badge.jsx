@@ -1,0 +1,2 @@
+import { statusTone } from "../../constants/status";
+export default function Badge({ status }) { return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(status)}`}>{status}</span>; }

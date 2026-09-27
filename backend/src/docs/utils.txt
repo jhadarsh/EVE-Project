@@ -1,0 +1,13 @@
+### `src/utils` — what we built
+
+* **`api-error.js`** — Provides a standardized `ApiError` class with HTTP status codes like 400, 401, 403, 404, 409, and 500.
+  Lets controllers/services throw consistent operational errors that the central error middleware can handle.
+
+* **`api-response.js`** — Provides a standardized format for successful API responses, including `success`, `message`, `data`, and optional `meta`.
+  Also provides helpers for `201 Created` and `204 No Content` responses.
+
+* **`async-handler.js`** — Wraps asynchronous Express controllers and automatically forwards rejected promises to `next()`.
+  This removes repetitive `try/catch` blocks from controllers.
+
+* **`pagination.js`** — Provides reusable pagination parsing with safe defaults and a maximum limit of 100 items.
+  Calculates `page`, `limit`, `offset`, and metadata such as total pages and next/previous-page availability.

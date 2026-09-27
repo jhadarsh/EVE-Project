@@ -1,0 +1,8 @@
+| File                       | What it does                                                                             | What frontend receives                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `auth.middleware.js`       | Reads `Authorization: Bearer <Supabase JWT>` and verifies the user with Supabase.        | `401` JSON if token is missing/invalid; otherwise request continues.        |
+| `admin.middleware.js`      | Checks authenticated user's `profiles.role` and allows only `ADMIN`.                     | `403` JSON if user isn't an admin; otherwise request continues.             |
+| `validate.middleware.js`   | Validates `body`, `params`, and `query` using Zod schemas.                               | `400` JSON with validation details when input is invalid.                   |
+| `rate-limit.middleware.js` | Limits repeated requests, with stricter limits for auth, booking, and payment APIs.      | `429` JSON when the limit is exceeded.                                      |
+| `not-found.middleware.js`  | Handles API routes that don't exist.                                                     | `404` JSON with `ROUTE_NOT_FOUND`.                                          |
+| `error.middleware.js`      | Centralizes all backend errors, logs them, and converts them into a consistent response. | Standard error JSON such as `{ success:false, message:"...", code:"..." }`. |

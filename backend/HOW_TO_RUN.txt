@@ -1,0 +1,161 @@
+EVE HEALTHCARE BACKEND — SETUP, REQUIREMENTS & RUN GUIDE
+=========================================================
+
+------------------------------------------------------------
+1. PREREQUISITES
+------------------------------------------------------------
+
+- Node.js  v18 or newer   (project tested on Node v22)
+- npm      (ships with Node)
+- A Supabase project (https://supabase.com) — this backend uses Supabase for
+  both PostgreSQL and JWT-based authentication, so you need:
+    * A Supabase project URL
+    * The project's "publishable" (anon) key
+    * The project's "secret" (service role) key
+- The following tables must already exist in that Supabase project's Postgres
+  database (see README.md section 4 for full column lists):
+    profiles, diagnostic_centres, tests, centre_tests, appointment_slots,
+    bookings, booking_tests, payments, webhook_events, backend_logs
+  ...plus a Postgres RPC function named reserve_appointment_slot(p_slot_id,
+  p_centre_id) that atomically reserves slot capacity.
+  NOTE: no .sql migration file ships in this repo yet — the schema currently
+  only exists inside the already-configured Supabase project. If you are
+  setting this up on a brand-new Supabase project, you must first recreate
+  these tables + the RPC function yourself (see README.md, "Known Gaps").
+
+------------------------------------------------------------
+2. DEPENDENCIES (from package.json)
+------------------------------------------------------------
+
+Runtime dependencies:
+  @supabase/supabase-js   ^2.109.0   Supabase client (DB + Auth)
+  express                 ^5.2.1     Web framework
+  cors                    ^2.8.6     CORS handling
+  helmet                  ^8.3.0     Security headers
+  express-rate-limit      ^8.7.0     Rate limiting
+  dotenv                  ^18.0.4    Loads .env into process.env
+  zod                     ^4.6.5     Request validation schemas
+  pino / pino-http        ^10 / ^11  (declared; the wired-up logger is a
+                                      custom JSON logger in src/logger, see
+                                      README.md)
+  swagger-jsdoc           ^6.3.0     Builds OpenAPI spec
+  swagger-ui-express      ^5.0.1     Serves Swagger UI at /api-docs
+  ws                      ^8.21.3    Required by supabase-js realtime client
+
+Dev dependencies:
+  jest        ^30.5.2   Test runner
+  supertest   ^7.3.0    HTTP assertions against the Express app
+  nodemon     ^3.1.14   Auto-restart during development
+
+Install everything with a single command (see step 4).
+
+------------------------------------------------------------
+3. ENVIRONMENT VARIABLES
+------------------------------------------------------------
+
+Create a file named ".env" in the project root (same folder as package.json)
+with the following keys. An ".env.example" is provided as a template but only
+contains two commented reference lines — fill in real values as below.
+
+  NODE_ENV=development
+  PORT=5000
+  FRONTEND_URL=http://localhost:5173
+  SUPABASE_URL=https://<your-project-ref>.supabase.co
+  SUPABASE_PUBLISHABLE_KEY=<your supabase publishable/anon key>
+  SUPABASE_SECRET_KEY=<your supabase secret/service-role key>
+  LOG_LEVEL=info
+
+Variable notes:
+  NODE_ENV                  development | test | production (validated on boot)
+  PORT                      1-65535 (validated on boot), defaults to 5000
+  FRONTEND_URL               used for CORS reference / validated as a URL,
+                             defaults to http://localhost:3000 if omitted
+  SUPABASE_URL               must be a valid http(s) URL — required, boot fails
+                             without it
+  SUPABASE_PUBLISHABLE_KEY   required, used for the "supabase" (Auth) client
+  SUPABASE_SECRET_KEY         required, used for the "supabaseAdmin" client —
+                             THIS IS A SECRET. Never expose it to a frontend,
+                             never commit it, never log it.
+  LOG_LEVEL                  optional, defaults to "info"
+
+IMPORTANT SECURITY NOTE:
+The .env file that came with this project already contains live Supabase
+keys. Treat those as compromised (anyone who had this file has them) —
+rotate the secret key (and ideally the publishable key) in your Supabase
+project dashboard before using this in anything beyond a private local test,
+and make sure .env is listed in .gitignore before you push to GitHub.
+
+------------------------------------------------------------
+4. INSTALL & RUN (LOCAL, NO DOCKER)
+------------------------------------------------------------
+
+  # 1. Move into the backend folder
+  cd backend
+
+  # 2. Install dependencies
+  npm install
+
+  # 3. Create .env as described in section 3 above
+
+  # 4. Start in development mode (auto-restarts on file changes)
+  npm run dev
+
+  # ...or start in plain/production mode
+  npm start
+
+The server logs "Backend server running on port <PORT>" once ready
+(default: http://localhost:5000).
+
+Quick checks once it's running:
+  GET  http://localhost:5000/health         -> { "success": true, ... }
+  GET  http://localhost:5000/api-docs        -> Swagger UI in the browser
+
+------------------------------------------------------------
+5. RUNNING TESTS
+------------------------------------------------------------
+
+  npm test          # runs the full Jest suite (--runInBand)
+  npm run test:watch
+
+See test/README.md and README.md section 7 for what is / isn't covered.
+
+------------------------------------------------------------
+6. NPM SCRIPTS REFERENCE
+------------------------------------------------------------
+
+  npm start        node src/server.js            (plain start, no auto-reload)
+  npm run dev       nodemon src/server.js          (auto-restart during dev)
+  npm test          jest --runInBand
+  npm run test:watch  jest --watch
+
+------------------------------------------------------------
+7. DOCKER
+------------------------------------------------------------
+
+No Dockerfile / docker-compose.yml is included in this backend yet (listed
+as an optional bonus in the assignment). Add one later if needed — the app
+only needs Node + the env vars above; there is no local database to
+containerize since Postgres/Auth is fully hosted on Supabase.
+
+------------------------------------------------------------
+8. TROUBLESHOOTING
+------------------------------------------------------------
+
+- "Missing required environment variables: ..." on boot
+    -> one of SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY / SUPABASE_SECRET_KEY
+       is missing from .env.
+
+- 401 "Authentication required" on every protected route
+    -> you must send the Supabase access token returned from
+       POST /api/auth/login (data.session.access_token) as:
+       Authorization: Bearer <access_token>
+
+- 403 "Administrator access required"
+    -> your Supabase profiles row has role = 'USER', not 'ADMIN'. Update
+       the row directly in Supabase (or via SQL) to test admin endpoints.
+
+- Booking/payment/slot calls return "Unable to reserve appointment slot"
+  or similar 500 errors
+    -> the reserve_appointment_slot RPC function is missing from your
+       Supabase project's database. It must be created manually (see
+       section 1) since it is not shipped as SQL in this repo.

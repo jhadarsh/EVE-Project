@@ -1,0 +1,463 @@
+EVE HEALTHCARE BACKEND — API ENDPOINT REFERENCE
+================================================
+
+Base URL (local):  http://localhost:5000
+API prefix:         /api
+
+--------------------------------------------------------------
+GENERAL RESPONSE SHAPES
+--------------------------------------------------------------
+
+Success:
+{
+  "success": true,
+  "message": "Human readable message",
+  "data": <object|array>,
+  "meta": { "page":1,"limit":10,"total":1,"totalPages":1,
+            "hasNextPage":false,"hasPreviousPage":false }   // only on list endpoints
+}
+
+Error:
+{
+  "success": false,
+  "message": "Request failed",
+  "code": "ERROR_CODE",
+  "details": [ { "path": "body.email", "message": "...", "code": "..." } ]  // only for
+                                                                            // validation errors,
+                                                                            // and only in dev
+}
+
+Common status codes: 200 OK, 201 Created, 400 Bad Request (validation),
+401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict,
+429 Too Many Requests, 500 Internal Server Error.
+
+Authentication header (for every "Auth: Required" endpoint below):
+  Authorization: Bearer <supabase_access_token>
+(the token comes from data.session.access_token on login/signup)
+
+Admin endpoints additionally require the caller's `profiles.role` = "ADMIN".
+
+==================================================================
+1. HEALTH & DOCS
+==================================================================
+
+GET /health
+  Auth: not required
+  Input: none
+  Output 200:
+    { "success":true,"message":"Backend is healthy",
+      "data": { "status":"ok","timestamp":"<ISO8601>" } }
+
+GET /api-docs
+  Auth: not required
+  Output: Swagger UI (HTML page), auto-generated OpenAPI 3.0.3 spec.
+
+==================================================================
+2. AUTH   (/api/auth)
+==================================================================
+
+POST /api/auth/signup
+  Auth: not required   |  Rate limit: 20 / 15 min
+  Input (body):
+    { "email":"user@example.com","password":"Password123!",
+      "full_name":"John Doe","phone":"9876543210" }
+    - email: valid email, max 320 chars, lowercased
+    - password: 8-128 chars
+    - full_name: 2-100 chars
+    - phone: 7-20 chars
+  Output 201:
+    { "success":true,"message":"Account created successfully",
+      "data": { "user": {...supabase user...}, "session": {...|null},
+                "emailConfirmed": false } }
+  Errors: 409 AUTH_EMAIL_EXISTS, 400 AUTHENTICATION_ERROR / AUTH_RATE_LIMITED
+
+POST /api/auth/login
+  Auth: not required   |  Rate limit: 20 / 15 min
+  Input (body): { "email":"user@example.com","password":"Password123!" }
+  Output 200:
+    { "success":true,"message":"Login successful",
+      "data": { "user":{...}, "profile": { "id":"uuid","full_name":"...",
+        "phone":"...","role":"USER","created_at":"...","updated_at":"..." },
+        "session": { "access_token":"...", "refresh_token":"...", ... } } }
+  Errors: 401 AUTH_INVALID_CREDENTIALS, 403 AUTH_EMAIL_NOT_VERIFIED
+
+POST /api/auth/verify
+  Auth: not required   |  Rate limit: 20 / 15 min
+  Input (body):
+    { "email":"user@example.com","token":"123456","type":"signup" }
+    - token: 4-20 chars
+    - type: one of signup|email|recovery|invite|email_change (default "signup")
+  Output 200:
+    { "success":true,"message":"Email verified successfully",
+      "data": { "user":{...}, "session":{...}, "verified":true } }
+  Errors: 400 AUTH_VERIFICATION_EXPIRED / AUTH_VERIFICATION_INVALID
+
+POST /api/auth/resend-verification
+  Auth: not required   |  Rate limit: 20 / 15 min
+  Input (body): { "email":"user@example.com" }
+  Output 200:
+    { "success":true,"message":"Verification email sent","data": {"sent":true} }
+
+GET /api/auth/me
+  Auth: required
+  Input: none (token identifies the user)
+  Output 200:
+    { "success":true,"message":"Current user retrieved successfully",
+      "data": { "user":{...}, "profile":{...} } }
+  Errors: 401 AUTH_TOKEN_REQUIRED / AUTH_TOKEN_INVALID, 404 PROFILE_NOT_FOUND
+
+POST /api/auth/logout
+  Auth: required
+  Input (body): {}
+  Output 200:
+    { "success":true,"message":"Logout successful","data": {"loggedOut":true} }
+
+==================================================================
+3. DIAGNOSTIC CENTRES   (/api/centres)
+==================================================================
+
+GET /api/centres
+  Auth: not required
+  Input (query, all optional): page (digits), limit (digits),
+    search (string, max 100 chars — matches name OR location)
+  Output 200 (list):
+    data: [ { "id":"uuid","name":"ABC Diagnostics","location":"Agra",
+      "address":"123 Main Road","description":"...","is_active":true,
+      "created_at":"...","updated_at":"..." }, ... ]
+    meta: pagination block
+
+GET /api/centres/:centreId
+  Auth: not required
+  Input (params): centreId = UUID
+  Output 200: single centre object (same shape as above)
+  Errors: 404 CENTRE_NOT_FOUND, 400 VALIDATION_ERROR (bad UUID)
+
+GET /api/centres/:centreId/tests
+  Auth: not required
+  Input: params.centreId = UUID; query: page/limit/search (optional)
+  Output 200 (list): centre_tests joined with test info:
+    [ { "id":"centre-test-uuid","centre_id":"...","test_id":"...","price":500,
+        "is_available":true,"created_at":"...","updated_at":"...",
+        "tests": { "id":"...","name":"CBC","description":"...",
+                   "information":"...","is_active":true } } ]
+
+GET /api/centres/:centreId/slots
+  Auth: not required
+  Input: params.centreId = UUID; query: date (YYYY-MM-DD, optional),
+    page/limit (optional)
+  Output 200 (list):
+    [ { "id":"uuid","centre_id":"...","appointment_date":"2026-10-01",
+        "start_time":"09:00:00","end_time":"10:00:00","capacity":10,
+        "booked_count":3,"available_count":7,"is_active":true,
+        "created_at":"...","updated_at":"..." } ]
+
+POST /api/centres            [ADMIN ONLY]
+  Auth: required + role ADMIN
+  Input (body):
+    { "name":"ABC Diagnostics","location":"Agra",
+      "address":"123 Main Road, Agra","description":"optional, max 2000 chars" }
+    - name/location: 2-150 chars, address: 5-500 chars
+  Output 201: created centre object.
+  Side effect: automatically generates 25 default appointment slots
+    (5 days x 5 slots/day, 09:00-17:00, capacity 10 each).
+  Errors: 409 CENTRE_EXISTS
+
+PATCH /api/centres/:centreId   [ADMIN ONLY]
+  Auth: required + role ADMIN
+  Input: params.centreId = UUID; body: any of name/location/address/
+    description/is_active (at least one field required)
+  Output 200: updated centre object.
+
+POST /api/centres/:centreId/tests   [ADMIN ONLY]
+  Auth: required + role ADMIN
+  Input: params.centreId = UUID; body:
+    { "test_id":"uuid","price":500,"is_available":true }  (is_available optional, default true)
+  Output 201: created centre_test row.
+  Errors: 404 TEST_NOT_FOUND, 400 TEST_INACTIVE, 409 CENTRE_TEST_EXISTS
+
+==================================================================
+4. DIAGNOSTIC TESTS   (/api/tests)
+==================================================================
+
+GET /api/tests
+  Auth: not required
+  Input (query, optional): page, limit, search (matches name OR description)
+  Output 200 (list): [ { "id":"uuid","name":"CBC","description":"...",
+    "information":"...","is_active":true,"created_at":"...","updated_at":"..." } ]
+
+GET /api/tests/:testId
+  Auth: not required
+  Input: params.testId = UUID
+  Output 200: single test object.
+  Errors: 404 TEST_NOT_FOUND
+
+GET /api/tests/:testId/centres
+  Auth: not required
+  Input: params.testId = UUID; query: page/limit/search (optional)
+  Output 200 (list): centres offering this test, joined:
+    [ { "id":"centre-test-uuid","centre_id":"...","test_id":"...","price":500,
+        "is_available":true,
+        "diagnostic_centres": { "id":"...","name":"...","location":"...",
+          "address":"...","description":"...","is_active":true } } ]
+
+POST /api/tests            [ADMIN ONLY]
+  Auth: required + role ADMIN
+  Input (body): { "name":"CBC","description":"optional","information":"optional" }
+    - name: 2-150 chars; description max 2000; information max 5000
+  Output 201: created test object.
+
+PATCH /api/tests/:testId    [ADMIN ONLY]
+  Auth: required + role ADMIN
+  Input: params.testId = UUID; body: any of name/description/information/
+    is_active (at least one field required)
+  Output 200: updated test object.
+
+==================================================================
+5. BOOKINGS   (/api/bookings)  — ALL require authentication
+==================================================================
+
+POST /api/bookings
+  Auth: required   |  Rate limit: 30 / 15 min
+  Input (body):
+    { "centre_id":"uuid","slot_id":"uuid","patient_name":"John Doe",
+      "patient_dob":"1995-05-20",              // optional, YYYY-MM-DD
+      "patient_phone":"9876543210","patient_email":"john@example.com",
+      "test_ids":["uuid-1","uuid-2"] }         // 1-50 items, no duplicates
+  Server-side rules (frontend cannot override):
+    - centre must exist & be active
+    - every test_id must be offered by that centre, active, and available
+    - slot must exist, belong to that centre, be active, be in the future,
+      and have free capacity (reserved atomically)
+    - total_amount = sum of each selected test's centre-specific price
+    - queue_number is assigned by the slot-reservation function
+    - booking always starts as status "PENDING"
+  Output 201:
+    { "success":true,"message":"Booking created successfully",
+      "data": { "id":"booking-uuid","user_id":"...","centre_id":"...",
+        "slot_id":"...","patient_name":"John Doe","patient_dob":"1995-05-20",
+        "patient_phone":"...","patient_email":"...","total_amount":900,
+        "queue_number":3,"status":"PENDING","created_at":"...","updated_at":"...",
+        "booking_tests": [ { "id":"uuid","centre_test_id":"uuid",
+          "test_name":"CBC","unit_price":500,"quantity":1,"subtotal":500,
+          "created_at":"..." } ],
+        "payments": [] } }
+  Errors: 404 CENTRE_NOT_FOUND / SLOT_NOT_FOUND,
+    400 TEST_UNAVAILABLE_AT_CENTRE / SLOT_IN_PAST,
+    409 SLOT_UNAVAILABLE (full) / SLOT_INACTIVE
+
+GET /api/bookings
+  Auth: required
+  Input (query, optional): page, limit,
+    status (PENDING|CONFIRMED|FAILED|CANCELLED)
+  Output 200 (list): bookings belonging ONLY to the authenticated user,
+    same shape as above (each with nested booking_tests + payments), + meta.
+
+GET /api/bookings/:bookingId
+  Auth: required
+  Input: params.bookingId = UUID
+  Output 200: single booking (must belong to caller).
+  Errors: 404 BOOKING_NOT_FOUND (also returned if it belongs to someone else)
+
+POST /api/bookings/:bookingId/cancel
+  Auth: required   |  Rate limit: 30 / 15 min
+  Input: params.bookingId = UUID; body: { "reason": "optional, max 500 chars" }
+  Rule: only allowed from PENDING or CONFIRMED status; releases 1 unit of
+    slot capacity on success.
+  Output 200: booking with status "CANCELLED".
+  Errors: 409 BOOKING_CANNOT_CANCEL (already FAILED/CANCELLED)
+
+==================================================================
+6. PAYMENTS   (/api/payments)
+==================================================================
+
+POST /api/payments
+  Auth: required   |  Rate limit: 30 / 15 min
+  Input (body): { "booking_id":"uuid" }
+  Rules:
+    - booking must belong to caller and be status PENDING
+    - if a PENDING payment already exists for this booking, it is returned
+      as-is instead of creating a duplicate
+    - if the booking is already paid (SUCCESS), request is rejected
+    - amount is copied from booking.total_amount — the client cannot set it
+  Output 201:
+    { "success":true,"message":"Payment created successfully",
+      "data": { "id":"payment-uuid","booking_id":"...",
+        "payment_reference":"SIM-1750000000000-ABC123","amount":900,
+        "status":"PENDING","provider":"SIMULATED","paid_at":null,
+        "created_at":"...","updated_at":"..." } }
+  Errors: 409 BOOKING_NOT_PAYABLE / BOOKING_ALREADY_PAID
+
+GET /api/payments/:paymentId
+  Auth: required
+  Input: params.paymentId = UUID
+  Output 200: payment scoped to caller's booking, including nested booking
+    summary:
+    { ...payment fields..., "bookings": { "id":"...","user_id":"...",
+      "total_amount":900,"status":"PENDING" } }
+  Errors: 404 PAYMENT_NOT_FOUND
+
+GET /api/payments/:paymentId/status
+  Auth: required
+  Input: params.paymentId = UUID
+  Output: identical shape/behaviour to GET /api/payments/:paymentId
+  (both routes currently call the same underlying operation)
+
+==================================================================
+7. PAYMENT WEBHOOK   (/api/payments/webhook)
+==================================================================
+
+POST /api/payments/webhook
+  Auth: NOT required (simulates an external payment provider)
+  Rate limit: 300 / 15 min (general limiter)
+  Input (body):
+    { "event_id":"event-12345",          // required, unique per event, idempotency key
+      "event_type":"payment.success",    // required, see accepted values below
+      "payment_id":"payment-uuid",       // required for success/failure processing
+      "payload": { "provider":"SIMULATED" } }   // optional, free-form object
+  Accepted "success" event_type values (case-insensitive):
+    payment.success, payment_success, payment.successful,
+    payment_successful, success, succeeded
+  Accepted "failure" event_type values (case-insensitive):
+    payment.failed, payment_failed, payment.failure,
+    payment_failure, failed, failure
+  Idempotency behaviour:
+    - event_id is stored in webhook_events with a DB unique constraint
+    - repeat delivery of the same event_id -> returns the ALREADY-stored
+      event/result, does not reprocess, does not touch payment/booking again
+    - a payment that is already SUCCESS cannot be flipped to FAILED, and
+      vice versa (returns 409 PAYMENT_STATE_CONFLICT)
+  Output 200 (first delivery, success case):
+    { "success":true,"message":"Webhook processed successfully",
+      "data": { "duplicate":false,
+        "event": { "id":"uuid","event_id":"event-12345",
+          "event_type":"payment.success","payment_id":"payment-uuid",
+          "payload":{},"status":"PROCESSED","processed_at":"...",
+          "created_at":"..." },
+        "payment": { "id":"payment-uuid","booking_id":"...",
+          "payment_reference":"SIM-...","amount":900,"status":"SUCCESS",
+          "provider":"SIMULATED","paid_at":"...","created_at":"...",
+          "updated_at":"..." } } }
+    Side effect: the related booking's status flips PENDING -> CONFIRMED.
+  Output 200 (failure case): payment.status = "FAILED", booking flips
+    PENDING -> FAILED.
+  Output 200 (duplicate/replayed event):
+    { "success":true,"message":"Webhook event already processed",
+      "data": { "duplicate":true, "event": {...previously stored event...} } }
+  Errors: 400 WEBHOOK_EVENT_TYPE_UNSUPPORTED / WEBHOOK_PAYMENT_ID_REQUIRED,
+    404 PAYMENT_NOT_FOUND, 409 PAYMENT_STATE_CONFLICT /
+    WEBHOOK_PREVIOUSLY_FAILED
+
+==================================================================
+8. ADMIN LOGS   (/api/logs)   [ADMIN ONLY]
+==================================================================
+
+GET /api/logs
+  Auth: required + role ADMIN
+  Input (query, optional): page, limit
+    NOTE: the log controller also supports filtering by event_type/severity
+    internally, but the currently-mounted route validates its query with
+    centreListSchema, which does not declare those two fields — so they
+    are effectively not usable through the public route today (see
+    README.md "Known Gaps"). Only page/limit/search are validated.
+  Output 200 (list):
+    [ { "id":"uuid","event_type":"BOOKING_CREATED","severity":"INFO",
+        "message":"Booking created successfully","user_id":"uuid",
+        "metadata":{ ... },"created_at":"..." } ]
+  Logs never include: passwords, tokens, OTPs, secret keys, or full request
+  bodies — sensitive fields are redacted before they are ever written.
+
+==================================================================
+9. FULL ENDPOINT LIST (quick reference)
+==================================================================
+
+HEALTH
+  GET   /health
+  GET   /api-docs
+
+AUTH
+  POST  /api/auth/signup
+  POST  /api/auth/login
+  POST  /api/auth/verify
+  POST  /api/auth/resend-verification
+  GET   /api/auth/me                (auth)
+  POST  /api/auth/logout            (auth)
+
+CENTRES
+  GET   /api/centres
+  GET   /api/centres/:centreId
+  GET   /api/centres/:centreId/tests
+  GET   /api/centres/:centreId/slots
+  POST  /api/centres                (auth + admin)
+  PATCH /api/centres/:centreId      (auth + admin)
+  POST  /api/centres/:centreId/tests (auth + admin)
+
+TESTS
+  GET   /api/tests
+  GET   /api/tests/:testId
+  GET   /api/tests/:testId/centres
+  POST  /api/tests                  (auth + admin)
+  PATCH /api/tests/:testId          (auth + admin)
+
+BOOKINGS  (all auth)
+  POST  /api/bookings
+  GET   /api/bookings
+  GET   /api/bookings/:bookingId
+  POST  /api/bookings/:bookingId/cancel
+
+PAYMENTS
+  POST  /api/payments               (auth)
+  GET   /api/payments/:paymentId    (auth)
+  GET   /api/payments/:paymentId/status (auth)
+  POST  /api/payments/webhook       (no auth — external provider simulation)
+
+LOGS
+  GET   /api/logs                   (auth + admin)
+
+==================================================================
+10. BOOKING & PAYMENT STATE MACHINES
+==================================================================
+
+Booking status:
+  PENDING --(payment success webhook)--> CONFIRMED
+  PENDING --(payment failed webhook)-->  FAILED
+  PENDING --(cancel)-->                  CANCELLED
+  CONFIRMED --(cancel)-->                CANCELLED
+  (FAILED and CANCELLED are terminal — cannot be cancelled again)
+
+Payment status:
+  PENDING --(webhook success)--> SUCCESS   (booking -> CONFIRMED)
+  PENDING --(webhook failure)--> FAILED    (booking -> FAILED)
+  (SUCCESS and FAILED are terminal — cannot be flipped by a later webhook)
+
+==================================================================
+11. SUGGESTED MANUAL TESTING ORDER
+==================================================================
+
+ 1. GET  /health
+ 2. GET  /api/centres
+ 3. GET  /api/tests
+ 4. GET  /api/centres/:centreId
+ 5. GET  /api/centres/:centreId/tests
+ 6. GET  /api/centres/:centreId/slots
+ 7. POST /api/auth/signup
+ 8. POST /api/auth/verify
+ 9. POST /api/auth/login              -> copy data.session.access_token
+10. GET  /api/auth/me                 (Bearer token)
+11. POST /api/bookings                (Bearer token)
+12. GET  /api/bookings/:bookingId
+13. POST /api/payments                -> copy data.id as paymentId
+14. POST /api/payments/webhook        (event_type: "payment.success", same
+                                        payment_id) -> booking becomes CONFIRMED
+15. POST /api/payments/webhook AGAIN with the same event_id -> duplicate:true,
+                                        nothing changes (idempotency check)
+16. POST /api/bookings/:bookingId/cancel
+
+Admin-only flow (requires a profiles.role = 'ADMIN' user):
+17. POST  /api/centres
+18. PATCH /api/centres/:centreId
+19. POST  /api/tests
+20. PATCH /api/tests/:testId
+21. POST  /api/centres/:centreId/tests
+22. GET   /api/logs
+
+END OF API_ENDPOINTS.txt

@@ -1,0 +1,122 @@
+EVE HEALTHCARE FRONTEND — SETUP, REQUIREMENTS & RUN GUIDE
+============================================================
+
+------------------------------------------------------------
+1. PREREQUISITES
+------------------------------------------------------------
+
+- Node.js  v18 or newer   (project tested on Node v22)
+- npm      (ships with Node)
+- The EVE Healthcare backend running and reachable (see
+  ../backend/HOW_TO_RUN.txt). The frontend calls the backend over its
+  REST API; it has no server or database of its own.
+
+------------------------------------------------------------
+2. DEPENDENCIES (from package.json)
+------------------------------------------------------------
+
+Runtime dependencies:
+  react                    ^19.1.1   UI library
+  react-dom                ^19.1.1   DOM renderer
+  react-router-dom         ^7.9.3    Client-side routing
+  @tanstack/react-query    ^5.90.5   Server-state caching & data fetching
+  axios                    ^1.12.2   HTTP client
+  react-hook-form          ^7.63.0   Form state management
+  @hookform/resolvers      ^5.2.2    Zod <-> react-hook-form bridge
+  zod                      ^4.1.12   Schema validation
+  framer-motion            ^12.23.24 Animation
+  lucide-react             ^0.468.0  Icons
+  qrcode.react             ^4.2.0    QR code rendering (simulated payment)
+
+Dev dependencies:
+  vite                     ^7.1.7    Dev server & build tool
+  @vitejs/plugin-react     ^5.0.4    React support for Vite
+  tailwindcss              ^3.4.17   Utility-first CSS
+  postcss / autoprefixer   ^8.5.6 / ^10.4.21   CSS tooling
+
+Install everything with a single command (see step 4).
+
+------------------------------------------------------------
+3. ENVIRONMENT VARIABLES
+------------------------------------------------------------
+
+Create a file named ".env" in the project root (same folder as
+package.json). A ".env.example" is provided as a template.
+
+  VITE_API_BASE_URL=http://localhost:5000/api
+
+Variable notes:
+  VITE_API_BASE_URL   Base URL of the EVE Healthcare backend API,
+                       including the /api prefix. The frontend reads the
+                       backend URL only from this variable — nothing is
+                       hardcoded in application source. Change this if
+                       your backend runs on a different host/port.
+
+------------------------------------------------------------
+4. INSTALL & RUN (LOCAL)
+------------------------------------------------------------
+
+  # 1. Move into the frontend folder
+  cd frontend
+
+  # 2. Install dependencies
+  npm install
+
+  # 3. Create .env as described in section 3 above
+  cp .env.example .env
+
+  # 4. Make sure the backend is running first
+  #    (see ../backend/HOW_TO_RUN.txt)
+
+  # 5. Start the dev server
+  npm run dev
+
+The dev server prints a local URL once ready (default:
+http://localhost:5173).
+
+------------------------------------------------------------
+5. PRODUCTION BUILD
+------------------------------------------------------------
+
+  npm run build       # outputs a static build to dist/
+  npm run preview      # serves the production build locally for a final check
+
+------------------------------------------------------------
+6. NPM SCRIPTS REFERENCE
+------------------------------------------------------------
+
+  npm run dev        vite               (development server, hot reload)
+  npm run build       vite build         (production build)
+  npm run preview     vite preview       (preview the production build)
+
+------------------------------------------------------------
+7. QUICK CHECK
+------------------------------------------------------------
+
+Once both servers are running:
+
+  1. Open http://localhost:5173 — the home page should list diagnostic
+     centres (confirms the frontend can reach the backend).
+  2. Open a centre, select one or more tests, and continue to booking —
+     you should be redirected to /login if you are not signed in yet.
+  3. Sign up, verify the email, log in — you should land back on the
+     booking flow rather than the home page.
+  4. Complete a booking through to the simulated payment screen.
+
+------------------------------------------------------------
+8. TROUBLESHOOTING
+------------------------------------------------------------
+
+- Home page shows a loading/error state and no centres appear
+    -> confirm the backend is running and reachable at the URL set in
+       VITE_API_BASE_URL, and that its CORS FRONTEND_URL setting matches
+       this app's origin (http://localhost:5173 by default).
+
+- Redirected to /login repeatedly, or admin pages show "Forbidden"
+    -> your account's role in Supabase (profiles.role) is USER, not
+       ADMIN. Admin pages require an ADMIN profile.
+
+- Payment screen never resolves to success/failure
+    -> the payment status only changes once the backend's payment webhook
+       has been triggered for that payment. See backend/API_ENDPOINTS.txt,
+       section 7, for how to simulate a webhook call.

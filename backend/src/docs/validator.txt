@@ -1,0 +1,19 @@
+### `src/validators` — short summary
+
+* **`auth.validator.js`** — Validates signup, login, email verification, resend-verification, and logout requests.
+  Checks email, password, name, phone, verification code, and authentication-related fields.
+
+* **`booking.validator.js`** — Validates booking creation, booking IDs, booking lists, and cancellation requests.
+  Checks UUIDs, patient information, dates, selected tests, pagination, and booking status.
+
+* **`centre.validator.js`** — Validates centre listing, centre IDs, create/update centre requests, tests, and available slots.
+  Checks UUIDs, names, addresses, search/pagination parameters, dates, and update fields.
+
+* **`test.validator.js`** — Validates test listing, test IDs, and create/update test requests.
+  Checks test names, descriptions, IDs, pagination, and active-status fields.
+
+* **`payment.validator.js`** — Validates payment-related requests such as creating a booking payment and checking payment status.
+  Ensures required booking/payment IDs are valid UUIDs before payment logic runs.
+
+* **`webhook.validator.js`** — Validates incoming payment webhook data before it reaches webhook processing logic.
+  Checks event ID, event type, payment ID, and payload structure to help prevent malformed webhook requests.
