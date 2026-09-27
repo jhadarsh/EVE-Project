@@ -4,6 +4,10 @@ A full-stack diagnostic test booking application built as the EVE Healthcare
 SDE Intern backend engineering assignment, extended with a complete React
 frontend to demonstrate the API end-to-end.
 
+Live Link:- https://eve-project-omega.vercel.app/
+Backend Link:- https://eve-project-biwk.onrender.com/health
+for admin acess use email:- adarshworkjha@gmail.com and password:- test@123
+
 ---
 
 ## Problem Statement
