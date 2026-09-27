@@ -116,6 +116,8 @@ cd frontend && npm install && npm run dev     # see frontend/HOW_TO_RUN.txt
   system logs
 - Structured backend logging with a dedicated admin log viewer
 - Swagger/OpenAPI documentation, pagination and rate limiting
+- for admin acess use email:- adarshworkjha@gmail.com
+- and password:- test@123
 
 For full detail on any of the above, see `backend/README.md`,
 `frontend/README.md` and `docs/USER_FLOW.md`.
